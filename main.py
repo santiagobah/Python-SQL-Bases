@@ -1,6 +1,7 @@
 from PyQt6.QtWidgets import QApplication, QLabel, QMainWindow, QWidget, QVBoxLayout, QComboBox, QPushButton, QMessageBox, QDialog, QLineEdit, QSpinBox, QFormLayout, QGridLayout
 import sys
 #uhfdhasfdbkhjfkbhsd
+#prueba 2
 class VentanaPrincipal(QMainWindow):
     def __init__(self):
         super().__init__()
