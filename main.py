@@ -1,9 +1,9 @@
 from PyQt6.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QWidget, QVBoxLayout, QComboBox, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem, QLineEdit, QDialog, QFormLayout
+    QApplication, QLabel, QMainWindow, QWidget, QVBoxLayout, QComboBox, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem, QLineEdit, QDialog, QFormLayout, QPlainTextEdit, QHBoxLayout
 )
 from PyQt6.QtCore import Qt
-from sqlalchemy import create_engine, text, MetaData, Column, String, Numeric, ForeignKey, CheckConstraint
-from sqlalchemy.orm import declarative_base, relationship
+from sqlalchemy import create_engine, MetaData, Column, String, Numeric, ForeignKey, text, CheckConstraint, func, and_, or_, not_, exists, select
+from sqlalchemy.orm import declarative_base, sessionmaker
 import sys
 
 metadata = MetaData()
@@ -86,6 +86,11 @@ class VentanaPrincipal(QMainWindow):
         self.boton_consultar = QPushButton("Ejecutar Consulta")
         self.boton_consultar.clicked.connect(self.ejecutar_consulta)
         self.layout.addWidget(self.boton_consultar)
+        
+        # Botón para ejecutar consulta personalizada
+        self.boton_consultapropia = QPushButton("Crear Consulta")
+        self.boton_consultapropia.clicked.connect(self.ejecutar_consulta_personalizada)
+        self.layout.addWidget(self.boton_consultapropia)
 
         # Tabla para mostrar resultados
         self.resultados = QTableWidget()
@@ -95,134 +100,175 @@ class VentanaPrincipal(QMainWindow):
         self.actualizar_descripcion(0)
 
     def obtener_consultas(self):
-        # Lista de consultas (10 en total)
+        # Crear una sesión de SQLAlchemy
+        Session = sessionmaker(bind=self.engine)
+        session = Session()
+
+        # Lista de consultas complejas utilizando ORM
         return [
             (
-                text("""
-                SELECT S.name
-                FROM student S
-                WHERE NOT EXISTS (
-                    SELECT C.course_id
-                    FROM course C
-                    WHERE C.dept_name = 'Computer Science'
-                    AND NOT EXISTS (
-                        SELECT T.ID
-                        FROM takes T
-                        WHERE T.ID = S.ID AND T.course_id = C.course_id
+                # Consulta 1: Número de estudiantes por departamento, ordenados de mayor a menor
+                session.query(
+                    Department.dept_name.label('Departamento'),
+                    func.count(Student.ID).label('Número de Estudiantes')
+                ).join(Student, Department.dept_name == Student.dept_name).group_by(
+                    Department.dept_name
+                ).order_by(
+                    func.count(Student.ID).desc()
+                ),
+                "Número de estudiantes por departamento, ordenados de mayor a menor"
+            ),
+            (
+                # Consulta 2: Cursos con más de 3 créditos y el número de secciones que tienen
+                session.query(
+                    Course.title.label('Curso'),
+                    func.count(Section.sec_id).label('Número de Secciones')
+                ).join(Section, Course.course_id == Section.course_id).filter(
+                    Course.credits > 3
+                ).group_by(
+                    Course.course_id, Course.title
+                ),
+                "Cursos con más de 3 créditos y el número de secciones que tienen"
+            ),
+            (
+                # Consulta 3: Instructores que han enseñado en más de un departamento
+                session.query(
+                    Instructor.name.label('Instructor'),
+                    func.count(Department.dept_name.distinct()).label('Departamentos Diferentes')
+                ).join(Teaches, Instructor.ID == Teaches.ID).join(
+                    Course, Teaches.course_id == Course.course_id
+                ).join(
+                    Department, Course.dept_name == Department.dept_name
+                ).group_by(
+                    Instructor.ID, Instructor.name
+                ).having(
+                    func.count(Department.dept_name.distinct()) > 1
+                ),
+                "Instructores que han enseñado en más de un departamento"
+            ),
+            (
+                # Consulta 4: Estudiantes que han tomado todos los cursos ofrecidos por su departamento
+                session.query(Student.name.label('Estudiante')).filter(
+                    ~exists(
+                        select(Course.course_id).where(
+                            and_(
+                                Course.dept_name == Student.dept_name,
+                                ~exists(
+                                    select(Takes.course_id).where(
+                                        and_(
+                                            Takes.ID == Student.ID,
+                                            Takes.course_id == Course.course_id
+                                        )
+                                    )
+                                )
+                            )
+                        )
                     )
-                )
-                """),
-                "Estudiantes que han tomado todos los cursos de 'Computer Science'"
+                ),
+                "Estudiantes que han tomado todos los cursos ofrecidos por su departamento"
             ),
             (
-                text("""
-                SELECT I.name
-                FROM instructor I
-                WHERE NOT EXISTS (
-                    SELECT *
-                    FROM teaches T
-                    WHERE T.ID = I.ID
-                )
-                """),
-                "Instructores que nunca han enseñado un curso"
+                # Consulta 5: Promedio de salarios por departamento, mostrando solo los departamentos con promedio superior al promedio general
+                session.query(
+                    Department.dept_name.label('Departamento'),
+                    func.avg(Instructor.salary).label('Salario Promedio')
+                ).join(Instructor, Department.dept_name == Instructor.dept_name).group_by(
+                    Department.dept_name
+                ).having(
+                    func.avg(Instructor.salary) > session.query(func.avg(Instructor.salary)).scalar_subquery()
+                ),
+                "Departamentos con salario promedio superior al promedio general"
             ),
             (
-                text("""
-                SELECT dept_name
-                FROM instructor
-                GROUP BY dept_name
-                HAVING AVG(salary) = (
-                    SELECT MAX(avg_salary)
-                    FROM (
-                        SELECT dept_name, AVG(salary) AS avg_salary
-                        FROM instructor
-                        GROUP BY dept_name
-                    ) AS dept_avg
-                )
-                """),
-                "Departamentos con el salario promedio más alto de instructores"
+                # Consulta 6: Cursos que no tienen prerrequisitos y se imparten en el semestre 'Fall' de 2021
+                session.query(
+                    Course.title.label('Curso'),
+                    Section.sec_id.label('Sección'),
+                    Section.semester.label('Semestre'),
+                    Section.year.label('Año')
+                ).join(Section, Course.course_id == Section.course_id).filter(
+                    and_(
+                        ~exists(
+                            select(Prereq.course_id).where(Prereq.course_id == Course.course_id)
+                        ),
+                        Section.semester == 'Fall',
+                        Section.year == 2021
+                    )
+                ),
+                "Cursos sin prerrequisitos impartidos en otoño de 2021"
             ),
             (
-                text("""
-                SELECT DISTINCT S.name
-                FROM student S
-                JOIN takes T ON S.ID = T.ID
-                JOIN teaches Te ON T.course_id = Te.course_id AND T.sec_id = Te.sec_id AND T.semester = Te.semester AND T.year = Te.year
-                JOIN instructor I ON Te.ID = I.ID
-                WHERE I.name = 'Dr. Smith'
-                """),
-                "Estudiantes que han tomado al menos un curso impartido por 'Dr. Smith'"
+                # Consulta 7: Nombre de estudiantes y sus asesores, incluyendo estudiantes sin asesor asignado
+                session.query(
+                    Student.name.label('Estudiante'),
+                    Instructor.name.label('Asesor')
+                ).outerjoin(Advisor, Student.ID == Advisor.s_ID).outerjoin(
+                    Instructor, Advisor.i_ID == Instructor.ID
+                ),
+                "Estudiantes y sus asesores, incluyendo aquellos sin asesor"
             ),
             (
-                text("""
-                SELECT C.course_id, C.title
-                FROM course C
-                WHERE NOT EXISTS (
-                    SELECT *
-                    FROM takes T
-                    WHERE T.course_id = C.course_id
-                )
-                """),
-                "Cursos que no han sido tomados por ningún estudiante"
+                # Consulta 8: Instructores que ganan más que el salario promedio de su departamento
+                session.query(
+                    Instructor.name.label('Instructor'),
+                    Instructor.salary.label('Salario'),
+                    Department.dept_name.label('Departamento')
+                ).join(Department, Instructor.dept_name == Department.dept_name).filter(
+                    Instructor.salary > session.query(
+                        func.avg(Instructor.salary)
+                    ).filter(
+                        Instructor.dept_name == Department.dept_name
+                    ).scalar_subquery()
+                ),
+                "Instructores que ganan más que el salario promedio de su departamento"
             ),
             (
-                text("""
-                SELECT D.dept_name, SUM(C.credits) AS total_credits
-                FROM department D
-                JOIN student S ON D.dept_name = S.dept_name
-                JOIN takes T ON S.ID = T.ID
-                JOIN course C ON T.course_id = C.course_id
-                GROUP BY D.dept_name
-                """),
-                "Total de créditos tomados por estudiantes en cada departamento"
+                # Consulta 9: Estudiantes que han tomado cursos con instructores de departamentos diferentes al suyo
+                session.query(
+                    Student.name.label('Estudiante'),
+                    Course.title.label('Curso'),
+                    Instructor.name.label('Instructor'),
+                    Student.dept_name.label('Dept. Estudiante'),
+                    Instructor.dept_name.label('Dept. Instructor')
+                ).join(
+                    Takes, Student.ID == Takes.ID
+                ).join(
+                    Section, and_(
+                        Takes.course_id == Section.course_id,
+                        Takes.sec_id == Section.sec_id,
+                        Takes.semester == Section.semester,
+                        Takes.year == Section.year
+                    )
+                ).join(
+                    Teaches, and_(
+                        Section.course_id == Teaches.course_id,
+                        Section.sec_id == Teaches.sec_id,
+                        Section.semester == Teaches.semester,
+                        Section.year == Teaches.year
+                    )
+                ).join(
+                    Instructor, Teaches.ID == Instructor.ID
+                ).join(
+                    Course, Course.course_id == Takes.course_id
+                ).filter(
+                    Student.dept_name != Instructor.dept_name
+                ),
+                "Estudiantes que han tomado cursos con instructores de departamentos diferentes al suyo"
             ),
             (
-                text("""
-                SELECT I.dept_name, I.name, I.salary
-                FROM instructor I
-                WHERE I.salary = (
-                    SELECT MAX(salary)
-                    FROM instructor
-                    WHERE dept_name = I.dept_name
-                )
-                """),
-                "Instructores con el salario más alto en su departamento"
-            ),
-            (
-                text("""
-                SELECT dept_name, AVG(credits) AS avg_credits
-                FROM course
-                GROUP BY dept_name
-                """),
-                "Créditos promedio de los cursos por departamento"
-            ),
-            (
-                text("""
-                SELECT DISTINCT I.name, I.dept_name AS instructor_dept, C.dept_name AS course_dept
-                FROM instructor I
-                JOIN teaches Te ON I.ID = Te.ID
-                JOIN course C ON Te.course_id = C.course_id
-                WHERE I.dept_name <> C.dept_name
-                """),
-                "Instructores que enseñan cursos en departamentos distintos al suyo"
-            ),
-            (
-                text("""
-                SELECT dept_name
-                FROM course
-                GROUP BY dept_name
-                HAVING COUNT(*) = (
-                    SELECT MAX(course_count)
-                    FROM (
-                        SELECT dept_name, COUNT(*) AS course_count
-                        FROM course
-                        GROUP BY dept_name
-                    ) AS dept_courses
-                )
-                """),
-                "Departamentos que ofrecen el mayor número de cursos"
+                # Consulta 10: Capacidad total por edificio, mostrando solo aquellos con capacidad total mayor a 100
+                session.query(
+                    Classroom.building.label('Edificio'),
+                    func.sum(Classroom.capacity).label('Capacidad Total')
+                ).group_by(
+                    Classroom.building
+                ).having(
+                    func.sum(Classroom.capacity) > 100
+                ),
+                "Capacidad total por edificio con capacidad mayor a 100"
             )
         ]
+
 
     def actualizar_descripcion(self, index):
         _, descripcion = self.consultas[index]
@@ -233,27 +279,96 @@ class VentanaPrincipal(QMainWindow):
         consulta_sql, descripcion = self.consultas[index]
         try:
             # Ejecutar la consulta seleccionada
-            with self.engine.connect() as conexion:
-                resultados = conexion.execute(consulta_sql).fetchall()
+            resultados = consulta_sql.all()
 
-                # Validar si hay resultados
-                if not resultados:
-                    QMessageBox.information(self, "Resultados", "La consulta no devolvió resultados.")
-                    self.resultados.clear()
-                    return
+            # Validar si hay resultados
+            if not resultados:
+                QMessageBox.information(self, "Resultados", "La consulta no devolvió resultados.")
+                self.resultados.clear()
+                return
 
-                # Obtener nombres de columnas
-                columnas = resultados[0]._fields if hasattr(resultados[0], '_fields') else resultados[0].keys()
+            # Obtener nombres de columnas
+            if hasattr(resultados[0], '_fields'):
+                columnas = resultados[0]._fields
+            else:
+                columnas = resultados[0].keys()
 
-                # Mostrar resultados en la tabla
-                self.resultados.setColumnCount(len(columnas))
-                self.resultados.setRowCount(len(resultados))
-                self.resultados.setHorizontalHeaderLabels(columnas)
-                for i, fila in enumerate(resultados):
-                    for j, valor in enumerate(fila):
-                        self.resultados.setItem(i, j, QTableWidgetItem(str(valor)))
+            # Mostrar resultados en la tabla
+            self.resultados.setColumnCount(len(columnas))
+            self.resultados.setRowCount(len(resultados))
+            self.resultados.setHorizontalHeaderLabels(columnas)
+            for i, fila in enumerate(resultados):
+                for j, valor in enumerate(fila):
+                    valor_mostrado = str(valor) if valor is not None else ''
+                    self.resultados.setItem(i, j, QTableWidgetItem(valor_mostrado))
+            # Ajustar el tamaño de las columnas
+            self.resultados.resizeColumnsToContents()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo ejecutar la consulta: {e}")
+            
+        
+    def ejecutar_consulta_personalizada(self):
+        # Crear y mostrar el diálogo para ingresar la consulta
+        dialogo = ConsultaPersonalizadaDialog()
+        if dialogo.exec():
+            consulta_usuario = dialogo.get_query()
+            try:
+                # Ejecutar la consulta ingresada por el usuario
+                with self.engine.connect() as conexion:
+                    resultados = conexion.execute(text(consulta_usuario)).fetchall()
+
+                    # Validar si hay resultados
+                    if not resultados:
+                        QMessageBox.information(self, "Resultados", "La consulta no devolvió resultados.")
+                        self.resultados.clear()
+                        return
+
+                    # Obtener nombres de columnas
+                    columnas = resultados[0]._fields if hasattr(resultados[0], '_fields') else resultados[0].keys()
+
+                    # Mostrar resultados en la tabla
+                    self.resultados.setColumnCount(len(columnas))
+                    self.resultados.setRowCount(len(resultados))
+                    self.resultados.setHorizontalHeaderLabels(columnas)
+                    for i, fila in enumerate(resultados):
+                        for j, valor in enumerate(fila):
+                            valor_mostrado = str(valor) if valor is not None else ''
+                            self.resultados.setItem(i, j, QTableWidgetItem(valor_mostrado))
+                    # Ajustar el tamaño de las columnas
+                    self.resultados.resizeColumnsToContents()
+            except Exception as e:
+                QMessageBox.critical(self, "Error", f"No se pudo ejecutar la consulta: {e}")
+
+        
+class ConsultaPersonalizadaDialog(QDialog):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Consulta Personalizada")
+        self.setGeometry(600, 350, 600, 400)
+
+        layout = QVBoxLayout(self)
+
+        # Campo de texto para ingresar la consulta
+        self.texto_consulta = QPlainTextEdit(self)
+        layout.addWidget(QLabel("Escriba su consulta SQL:"))
+        layout.addWidget(self.texto_consulta)
+
+        # Botones de acción
+        botones = QHBoxLayout()
+        self.boton_ejecutar = QPushButton("Ejecutar")
+        self.boton_cancelar = QPushButton("Cancelar")
+        botones.addWidget(self.boton_ejecutar)
+        botones.addWidget(self.boton_cancelar)
+        layout.addLayout(botones)
+
+        self.boton_ejecutar.clicked.connect(self.accept)
+        self.boton_cancelar.clicked.connect(self.reject)
+
+        self.setLayout(layout)
+    
+    def get_query(self):
+        return self.texto_consulta.toPlainText()
+
 
 # Configuración de tablas
 class Classroom(Base):
