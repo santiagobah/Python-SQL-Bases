@@ -167,3 +167,11 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     programa = VentanaPrincipal()
     sys.exit(app.exec())
+
+#a
+#a
+#b
+#b
+#c
+#c
+#hago esto para ver que el commit se haga bien
