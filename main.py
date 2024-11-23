@@ -33,9 +33,16 @@ class VentanaPrincipal(QMainWindow):
         self.layout.addWidget(QLabel("Selecciona una consulta:"))
         self.consultas_disponibles = QComboBox()
         self.consultas = self.obtener_consultas()
-        for i, consulta in enumerate(self.consultas):
+        for i, (consulta_sql, descripcion) in enumerate(self.consultas):
             self.consultas_disponibles.addItem(f"Consulta {i + 1}")
         self.layout.addWidget(self.consultas_disponibles)
+
+        # QLabel para mostrar la descripción de la consulta seleccionada
+        self.descripcion_consulta = QLabel()
+        self.layout.addWidget(self.descripcion_consulta)
+
+        # Conectar el cambio de selección del ComboBox a una función
+        self.consultas_disponibles.currentIndexChanged.connect(self.actualizar_descripcion)
 
         # Botón para ejecutar la consulta
         self.boton_consultar = QPushButton("Ejecutar Consulta")
@@ -46,20 +53,152 @@ class VentanaPrincipal(QMainWindow):
         self.resultados = QTableWidget()
         self.layout.addWidget(self.resultados)
 
+        # Inicializar la descripción con la primera consulta
+        self.actualizar_descripcion(0)
+
     def obtener_consultas(self):
-        # LISTA DE CONSULTAS DE EJEMPLO, TENEMOS QUE SACAR UNAS MAMDAS, LO PUSE ASI PARA VER Q PEI
+        # Lista de consultas más complejas
         return [
-            ("SELECT * FROM student", "Lista de estudiantes"),
-            ("SELECT * FROM instructor WHERE salary > 50000", "Profesores con salario mayor a 50,000"),
-            ("SELECT * FROM course", "Lista de cursos"),
-            ("SELECT * FROM department WHERE budget > 100000", "Departamentos con presupuesto mayor a 100,000"),
-            ("SELECT * FROM section WHERE year = 2024", "Secciones ofrecidas en 2024"),
-            ("SELECT student.name, takes.course_id FROM student JOIN takes ON student.ID = takes.ID", "Estudiantes y cursos que toman"),
-            ("SELECT instructor.name, teaches.course_id FROM instructor JOIN teaches ON instructor.ID = teaches.ID", "Profesores y cursos que enseñan"),
-            ("SELECT * FROM classroom WHERE capacity >= 50", "Aulas con capacidad mayor o igual a 50"),
-            ("SELECT course.title, prereq.prereq_id FROM course JOIN prereq ON course.course_id = prereq.course_id", "Cursos con sus prerequisitos"),
-            ("SELECT AVG(salary) AS avg_salary FROM instructor", "Salario promedio de los instructores")
+            # Consulta 1
+            (
+                """
+                SELECT S.name
+                FROM student S
+                WHERE NOT EXISTS (
+                    SELECT C.course_id
+                    FROM course C
+                    WHERE C.dept_name = 'Computer Science'
+                    AND NOT EXISTS (
+                        SELECT T.ID
+                        FROM takes T
+                        WHERE T.ID = S.ID AND T.course_id = C.course_id
+                    )
+                )
+                """,
+                "Estudiantes que han tomado todos los cursos de 'Computer Science'"
+            ),
+            # Consulta 2
+            (
+                """
+                SELECT I.name
+                FROM instructor I
+                WHERE NOT EXISTS (
+                    SELECT *
+                    FROM teaches T
+                    WHERE T.ID = I.ID
+                )
+                """,
+                "Instructores que nunca han enseñado un curso"
+            ),
+            # Consulta 3
+            (
+                """
+                SELECT dept_name
+                FROM instructor
+                GROUP BY dept_name
+                HAVING AVG(salary) = (
+                    SELECT MAX(avg_salary)
+                    FROM (
+                        SELECT dept_name, AVG(salary) AS avg_salary
+                        FROM instructor
+                        GROUP BY dept_name
+                    ) AS dept_avg
+                )
+                """,
+                "Departamentos con el salario promedio más alto de instructores"
+            ),
+            # Consulta 4
+            (
+                """
+                SELECT DISTINCT S.name
+                FROM student S
+                JOIN takes T ON S.ID = T.ID
+                JOIN teaches Te ON T.course_id = Te.course_id AND T.sec_id = Te.sec_id AND T.semester = Te.semester AND T.year = Te.year
+                JOIN instructor I ON Te.ID = I.ID
+                WHERE I.name = 'Dr. Smith'
+                """,
+                "Estudiantes que han tomado al menos un curso impartido por 'Dr. Smith'"
+            ),
+            # Consulta 5
+            (
+                """
+                SELECT C.course_id, C.title
+                FROM course C
+                WHERE NOT EXISTS (
+                    SELECT *
+                    FROM takes T
+                    WHERE T.course_id = C.course_id
+                )
+                """,
+                "Cursos que no han sido tomados por ningún estudiante"
+            ),
+            # Consulta 6
+            (
+                """
+                SELECT D.dept_name, SUM(C.credits) AS total_credits
+                FROM department D
+                JOIN student S ON D.dept_name = S.dept_name
+                JOIN takes T ON S.ID = T.ID
+                JOIN course C ON T.course_id = C.course_id
+                GROUP BY D.dept_name
+                """,
+                "Total de créditos tomados por estudiantes en cada departamento"
+            ),
+            # Consulta 7
+            (
+                """
+                SELECT I.dept_name, I.name, I.salary
+                FROM instructor I
+                WHERE I.salary = (
+                    SELECT MAX(salary)
+                    FROM instructor
+                    WHERE dept_name = I.dept_name
+                )
+                """,
+                "Instructores con el salario más alto en su departamento"
+            ),
+            # Consulta 8
+            (
+                """
+                SELECT dept_name, AVG(credits) AS avg_credits
+                FROM course
+                GROUP BY dept_name
+                """,
+                "Créditos promedio de los cursos por departamento"
+            ),
+            # Consulta 9
+            (
+                """
+                SELECT DISTINCT I.name, I.dept_name AS instructor_dept, C.dept_name AS course_dept
+                FROM instructor I
+                JOIN teaches Te ON I.ID = Te.ID
+                JOIN course C ON Te.course_id = C.course_id
+                WHERE I.dept_name <> C.dept_name
+                """,
+                "Instructores que enseñan cursos en departamentos distintos al suyo"
+            ),
+            # Consulta 10
+            (
+                """
+                SELECT dept_name
+                FROM course
+                GROUP BY dept_name
+                HAVING COUNT(*) = (
+                    SELECT MAX(course_count)
+                    FROM (
+                        SELECT dept_name, COUNT(*) AS course_count
+                        FROM course
+                        GROUP BY dept_name
+                    ) AS dept_courses
+                )
+                """,
+                "Departamentos que ofrecen el mayor número de cursos"
+            )
         ]
+
+    def actualizar_descripcion(self, index):
+        _, descripcion = self.consultas[index]
+        self.descripcion_consulta.setText(f"Descripción: {descripcion}")
 
     def ejecutar_consulta(self):
         index = self.consultas_disponibles.currentIndex()
@@ -167,11 +306,3 @@ if __name__ == "__main__":
     app = QApplication(sys.argv)
     programa = VentanaPrincipal()
     sys.exit(app.exec())
-
-#a
-#a
-#b
-#b
-#c
-#c
-#hago esto para ver que el commit se haga bien
