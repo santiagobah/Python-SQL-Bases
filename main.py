@@ -14,7 +14,7 @@ class LoginDialog(QDialog):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Conexión a la Base de Datos")
-        self.setGeometry(500, 300, 300, 150)
+        self.setGeometry(500, 300, 350, 250)
 
         layout = QFormLayout(self)
 
@@ -40,6 +40,35 @@ class LoginDialog(QDialog):
 
         self.setLayout(layout)
 
+        # Aplicar estilo CSS
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2c3e50;
+            }
+            QLabel {
+                font-size: 14px;
+                color: #ecf0f1;
+            }
+            QLineEdit {
+                padding: 5px;
+                border: 1px solid #34495e;
+                border-radius: 5px;
+                background-color: #34495e;
+                color: #ecf0f1;
+            }
+            QPushButton {
+                background-color: #1abc9c;
+                color: white;
+                border: none;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #16a085;
+            }
+        """)
+
     def get_credentials(self):
         return {
             "username": self.username_input.text(),
@@ -57,7 +86,7 @@ class VentanaPrincipal(QMainWindow):
         self.iniciar_programa()
 
     def iniciar_programa(self):
-        self.setGeometry(400, 200, 800, 600)
+        self.setGeometry(400, 200, 900, 700)
         self.setWindowTitle("Consultas Predefinidas de University")
         self.mostrar_principal()
         self.show()
@@ -68,7 +97,8 @@ class VentanaPrincipal(QMainWindow):
         self.layout = QVBoxLayout(self.widget_principal)
 
         # ComboBox para seleccionar consultas
-        self.layout.addWidget(QLabel("Selecciona una consulta:"))
+        titulo_label = QLabel("Selecciona una consulta:")
+        self.layout.addWidget(titulo_label)
         self.consultas_disponibles = QComboBox()
         self.consultas = self.obtener_consultas()
         for i, (consulta_sql, descripcion) in enumerate(self.consultas):
@@ -83,18 +113,87 @@ class VentanaPrincipal(QMainWindow):
         self.consultas_disponibles.currentIndexChanged.connect(self.actualizar_descripcion)
 
         # Botón para ejecutar la consulta
+        botones_layout = QHBoxLayout()
         self.boton_consultar = QPushButton("Ejecutar Consulta")
         self.boton_consultar.clicked.connect(self.ejecutar_consulta)
-        self.layout.addWidget(self.boton_consultar)
-        
+        botones_layout.addWidget(self.boton_consultar)
+
         # Botón para ejecutar consulta personalizada
         self.boton_consultapropia = QPushButton("Crear Consulta")
         self.boton_consultapropia.clicked.connect(self.ejecutar_consulta_personalizada)
-        self.layout.addWidget(self.boton_consultapropia)
+        botones_layout.addWidget(self.boton_consultapropia)
+
+        self.layout.addLayout(botones_layout)
 
         # Tabla para mostrar resultados
         self.resultados = QTableWidget()
         self.layout.addWidget(self.resultados)
+
+        # Aplicar estilo CSS
+        self.setStyleSheet("""
+            QMainWindow {
+                background-color: #2c3e50;
+            }
+            QLabel {
+                font-size: 16px;
+                color: #ecf0f1;
+            }
+            QComboBox {
+                padding: 5px;
+                font-size: 14px;
+                border: 1px solid #34495e;
+                border-radius: 5px;
+                background-color: #34495e;
+                color: #ecf0f1;
+            }
+            QComboBox QAbstractItemView {
+                background-color: #34495e;
+                selection-background-color: #1abc9c;
+                color: #ecf0f1;
+            }
+            QPushButton {
+                background-color: #1abc9c;
+                color: white;
+                border: none;
+                padding: 10px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #16a085;
+            }
+            QTableWidget {
+                background-color: #34495e;
+                border: 1px solid #34495e;
+                font-size: 13px;
+                color: #ecf0f1;
+            }
+            QHeaderView::section {
+                background-color: #1abc9c;
+                padding: 4px;
+                border: 1px solid #34495e;
+                font-size: 13px;
+                color: white;
+            }
+            QTableWidget QTableCornerButton::section {
+                background-color: #1abc9c;
+                border: 1px solid #34495e;
+            }
+            QScrollBar:vertical {
+                background-color: #2c3e50;
+                width: 15px;
+                margin: 22px 0 22px 0;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #1abc9c;
+                min-height: 20px;
+                border-radius: 7px;
+            }
+            QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+                background: none;
+                height: 0px;
+            }
+        """)
 
         # Inicializar la descripción con la primera consulta
         self.actualizar_descripcion(0)
@@ -305,8 +404,8 @@ class VentanaPrincipal(QMainWindow):
             self.resultados.resizeColumnsToContents()
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo ejecutar la consulta: {e}")
-            
-        
+
+
     def ejecutar_consulta_personalizada(self):
         # Crear y mostrar el diálogo para ingresar la consulta
         dialogo = ConsultaPersonalizadaDialog()
@@ -339,7 +438,7 @@ class VentanaPrincipal(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo ejecutar la consulta: {e}")
 
-        
+
 class ConsultaPersonalizadaDialog(QDialog):
     def __init__(self):
         super().__init__()
@@ -365,7 +464,36 @@ class ConsultaPersonalizadaDialog(QDialog):
         self.boton_cancelar.clicked.connect(self.reject)
 
         self.setLayout(layout)
-    
+
+        # Aplicar estilo CSS
+        self.setStyleSheet("""
+            QDialog {
+                background-color: #2c3e50;
+            }
+            QLabel {
+                font-size: 14px;
+                color: #ecf0f1;
+            }
+            QPlainTextEdit {
+                background-color: #34495e;
+                border: 1px solid #34495e;
+                border-radius: 5px;
+                font-size: 14px;
+                color: #ecf0f1;
+            }
+            QPushButton {
+                background-color: #e74c3c;
+                color: white;
+                border: none;
+                padding: 8px;
+                border-radius: 5px;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                background-color: #c0392b;
+            }
+        """)
+
     def get_query(self):
         return self.texto_consulta.toPlainText()
 
@@ -457,7 +585,7 @@ if __name__ == "__main__":
 
         # Crear URL de la base de datos
         DATABASE_URL = f"mysql+pymysql://{credentials['username']}:{credentials['password']}@{credentials['host']}/{credentials['database']}"
-        
+
         # Iniciar la aplicación principal
         programa = VentanaPrincipal(DATABASE_URL)
         sys.exit(app.exec())
