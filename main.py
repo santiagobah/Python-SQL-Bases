@@ -1,21 +1,59 @@
 from PyQt6.QtWidgets import (
-    QApplication, QLabel, QMainWindow, QWidget, QVBoxLayout, QComboBox, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem
+    QApplication, QLabel, QMainWindow, QWidget, QVBoxLayout, QComboBox, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem, QLineEdit, QDialog, QFormLayout
 )
 from PyQt6.QtCore import Qt
-from sqlalchemy import create_engine, MetaData, Table, select, Column, String, Numeric, ForeignKey, CheckConstraint
+from sqlalchemy import create_engine, text, MetaData, Column, String, Numeric, ForeignKey, CheckConstraint
 from sqlalchemy.orm import declarative_base, relationship
 import sys
 
-# URL de la base de datos (PEDIRSE AL USUARIO EN LA PRÁCTICA)
-DATABASE_URL = "mysql+pymysql://usuario:contraseña@localhost/university"
-engine = create_engine(DATABASE_URL)
 metadata = MetaData()
 Base = declarative_base()
 
-# Clase principal de la interfaz
-class VentanaPrincipal(QMainWindow):
+# Clase para solicitar credenciales
+class LoginDialog(QDialog):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("Conexión a la Base de Datos")
+        self.setGeometry(500, 300, 300, 150)
+
+        layout = QFormLayout(self)
+
+        # Campos de entrada para usuario, contraseña y base de datos
+        self.username_input = QLineEdit(self)
+        self.password_input = QLineEdit(self)
+        self.database_input = QLineEdit(self)
+        self.host_input = QLineEdit(self)
+
+        self.password_input.setEchoMode(QLineEdit.EchoMode.Password)  # Ocultar texto de la contraseña
+        self.database_input.setPlaceholderText("university")
+        self.host_input.setPlaceholderText("localhost")
+
+        layout.addRow("Usuario:", self.username_input)
+        layout.addRow("Contraseña:", self.password_input)
+        layout.addRow("Base de datos:", self.database_input)
+        layout.addRow("Host:", self.host_input)
+
+        # Botón para conectar
+        self.boton_conectar = QPushButton("Conectar", self)
+        self.boton_conectar.clicked.connect(self.accept)
+        layout.addWidget(self.boton_conectar)
+
+        self.setLayout(layout)
+
+    def get_credentials(self):
+        return {
+            "username": self.username_input.text(),
+            "password": self.password_input.text(),
+            "database": self.database_input.text() or "university",
+            "host": self.host_input.text() or "localhost",
+        }
+
+# Clase principal de la interfaz
+class VentanaPrincipal(QMainWindow):
+    def __init__(self, database_url):
+        super().__init__()
+        self.database_url = database_url
+        self.engine = create_engine(self.database_url)
         self.iniciar_programa()
 
     def iniciar_programa(self):
@@ -57,11 +95,10 @@ class VentanaPrincipal(QMainWindow):
         self.actualizar_descripcion(0)
 
     def obtener_consultas(self):
-        # Lista de consultas más complejas
+        # Lista de consultas (10 en total)
         return [
-            # Consulta 1
             (
-                """
+                text("""
                 SELECT S.name
                 FROM student S
                 WHERE NOT EXISTS (
@@ -74,12 +111,11 @@ class VentanaPrincipal(QMainWindow):
                         WHERE T.ID = S.ID AND T.course_id = C.course_id
                     )
                 )
-                """,
+                """),
                 "Estudiantes que han tomado todos los cursos de 'Computer Science'"
             ),
-            # Consulta 2
             (
-                """
+                text("""
                 SELECT I.name
                 FROM instructor I
                 WHERE NOT EXISTS (
@@ -87,12 +123,11 @@ class VentanaPrincipal(QMainWindow):
                     FROM teaches T
                     WHERE T.ID = I.ID
                 )
-                """,
+                """),
                 "Instructores que nunca han enseñado un curso"
             ),
-            # Consulta 3
             (
-                """
+                text("""
                 SELECT dept_name
                 FROM instructor
                 GROUP BY dept_name
@@ -104,24 +139,22 @@ class VentanaPrincipal(QMainWindow):
                         GROUP BY dept_name
                     ) AS dept_avg
                 )
-                """,
+                """),
                 "Departamentos con el salario promedio más alto de instructores"
             ),
-            # Consulta 4
             (
-                """
+                text("""
                 SELECT DISTINCT S.name
                 FROM student S
                 JOIN takes T ON S.ID = T.ID
                 JOIN teaches Te ON T.course_id = Te.course_id AND T.sec_id = Te.sec_id AND T.semester = Te.semester AND T.year = Te.year
                 JOIN instructor I ON Te.ID = I.ID
                 WHERE I.name = 'Dr. Smith'
-                """,
+                """),
                 "Estudiantes que han tomado al menos un curso impartido por 'Dr. Smith'"
             ),
-            # Consulta 5
             (
-                """
+                text("""
                 SELECT C.course_id, C.title
                 FROM course C
                 WHERE NOT EXISTS (
@@ -129,24 +162,22 @@ class VentanaPrincipal(QMainWindow):
                     FROM takes T
                     WHERE T.course_id = C.course_id
                 )
-                """,
+                """),
                 "Cursos que no han sido tomados por ningún estudiante"
             ),
-            # Consulta 6
             (
-                """
+                text("""
                 SELECT D.dept_name, SUM(C.credits) AS total_credits
                 FROM department D
                 JOIN student S ON D.dept_name = S.dept_name
                 JOIN takes T ON S.ID = T.ID
                 JOIN course C ON T.course_id = C.course_id
                 GROUP BY D.dept_name
-                """,
+                """),
                 "Total de créditos tomados por estudiantes en cada departamento"
             ),
-            # Consulta 7
             (
-                """
+                text("""
                 SELECT I.dept_name, I.name, I.salary
                 FROM instructor I
                 WHERE I.salary = (
@@ -154,32 +185,29 @@ class VentanaPrincipal(QMainWindow):
                     FROM instructor
                     WHERE dept_name = I.dept_name
                 )
-                """,
+                """),
                 "Instructores con el salario más alto en su departamento"
             ),
-            # Consulta 8
             (
-                """
+                text("""
                 SELECT dept_name, AVG(credits) AS avg_credits
                 FROM course
                 GROUP BY dept_name
-                """,
+                """),
                 "Créditos promedio de los cursos por departamento"
             ),
-            # Consulta 9
             (
-                """
+                text("""
                 SELECT DISTINCT I.name, I.dept_name AS instructor_dept, C.dept_name AS course_dept
                 FROM instructor I
                 JOIN teaches Te ON I.ID = Te.ID
                 JOIN course C ON Te.course_id = C.course_id
                 WHERE I.dept_name <> C.dept_name
-                """,
+                """),
                 "Instructores que enseñan cursos en departamentos distintos al suyo"
             ),
-            # Consulta 10
             (
-                """
+                text("""
                 SELECT dept_name
                 FROM course
                 GROUP BY dept_name
@@ -191,7 +219,7 @@ class VentanaPrincipal(QMainWindow):
                         GROUP BY dept_name
                     ) AS dept_courses
                 )
-                """,
+                """),
                 "Departamentos que ofrecen el mayor número de cursos"
             )
         ]
@@ -205,22 +233,29 @@ class VentanaPrincipal(QMainWindow):
         consulta_sql, descripcion = self.consultas[index]
         try:
             # Ejecutar la consulta seleccionada
-            conexion = engine.connect()
-            resultados = conexion.execute(consulta_sql).fetchall()
-            columnas = conexion.execute(consulta_sql).keys()
-            conexion.close()
+            with self.engine.connect() as conexion:
+                resultados = conexion.execute(consulta_sql).fetchall()
 
-            # Mostrar resultados en la tabla
-            self.resultados.setColumnCount(len(columnas))
-            self.resultados.setRowCount(len(resultados))
-            self.resultados.setHorizontalHeaderLabels(columnas)
-            for i, fila in enumerate(resultados):
-                for j, valor in enumerate(fila):
-                    self.resultados.setItem(i, j, QTableWidgetItem(str(valor)))
+                # Validar si hay resultados
+                if not resultados:
+                    QMessageBox.information(self, "Resultados", "La consulta no devolvió resultados.")
+                    self.resultados.clear()
+                    return
+
+                # Obtener nombres de columnas
+                columnas = resultados[0]._fields if hasattr(resultados[0], '_fields') else resultados[0].keys()
+
+                # Mostrar resultados en la tabla
+                self.resultados.setColumnCount(len(columnas))
+                self.resultados.setRowCount(len(resultados))
+                self.resultados.setHorizontalHeaderLabels(columnas)
+                for i, fila in enumerate(resultados):
+                    for j, valor in enumerate(fila):
+                        self.resultados.setItem(i, j, QTableWidgetItem(str(valor)))
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo ejecutar la consulta: {e}")
 
-# Definiciones de tablas (no modificadas)
+# Configuración de tablas
 class Classroom(Base):
     __tablename__ = 'classroom'
     building = Column(String(15), primary_key=True)
@@ -297,12 +332,19 @@ class Prereq(Base):
     course_id = Column(String(8), ForeignKey('course.course_id', ondelete='CASCADE'), primary_key=True)
     prereq_id = Column(String(8), ForeignKey('course.course_id', ondelete='CASCADE'), primary_key=True)
 
-# Configuración de relaciones
-Department.courses = relationship('Course', back_populates='department', cascade='all, delete-orphan')
-Department.instructors = relationship('Instructor', cascade='all, delete-orphan')
-Department.students = relationship('Student', cascade='all, delete-orphan')
-
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    programa = VentanaPrincipal()
-    sys.exit(app.exec())
+
+    # Mostrar ventana de inicio de sesión
+    login_dialog = LoginDialog()
+    if login_dialog.exec():
+        credentials = login_dialog.get_credentials()
+
+        # Crear URL de la base de datos
+        DATABASE_URL = f"mysql+pymysql://{credentials['username']}:{credentials['password']}@{credentials['host']}/{credentials['database']}"
+        
+        # Iniciar la aplicación principal
+        programa = VentanaPrincipal(DATABASE_URL)
+        sys.exit(app.exec())
+    else:
+        sys.exit()
