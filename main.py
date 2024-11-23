@@ -1,3 +1,5 @@
+# Versión definitiva a 23/11/24
+
 from PyQt6.QtWidgets import (
     QApplication, QLabel, QMainWindow, QWidget, QVBoxLayout, QComboBox, QPushButton, QMessageBox, QTableWidget, QTableWidgetItem, QLineEdit, QDialog, QFormLayout, QPlainTextEdit, QHBoxLayout
 )
