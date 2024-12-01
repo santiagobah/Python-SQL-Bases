@@ -147,25 +147,30 @@ class VentanaPrincipal(QMainWindow):
                 "Instructores que han enseñado en más de un departamento"
             ),
             (
-                # Consulta 4: Estudiantes que han tomado todos los cursos ofrecidos por su departamento
-                session.query(Student.name.label('Estudiante')).filter(
-                    ~exists(
-                        select(Course.course_id).where(
-                            and_(
-                                Course.dept_name == Student.dept_name,
-                                ~exists(
-                                    select(Takes.course_id).where(
-                                        and_(
-                                            Takes.ID == Student.ID,
-                                            Takes.course_id == Course.course_id
-                                        )
-                                    )
-                                )
-                            )
-                        )
+                # Consulta 4: Estudiantes asesorados por un profesor que también les imparte clases
+                session.query(
+                    Student.name.label('Estudiante'),
+                    Instructor.name.label('Asesor'),
+                    Course.title.label('Curso Tomado')
+                ).join(
+                    Advisor, Student.ID == Advisor.s_ID
+                ).join(
+                    Instructor, Advisor.i_ID == Instructor.ID
+                ).join(
+                    Takes, Student.ID == Takes.ID
+                ).join(
+                    Teaches,
+                    and_(
+                        Teaches.ID == Instructor.ID,
+                        Teaches.course_id == Takes.course_id,
+                        Teaches.sec_id == Takes.sec_id,
+                        Teaches.semester == Takes.semester,
+                        Teaches.year == Takes.year
                     )
-                ),
-                "Estudiantes que han tomado todos los cursos ofrecidos por su departamento"
+                ).join(
+                    Course, Course.course_id == Takes.course_id
+                ).distinct(),
+                "Estudiantes asesorados por un profesor que también les imparte clases"
             ),
             (
                 # Consulta 5: Promedio de salarios por departamento, mostrando solo los departamentos con promedio superior al promedio general
@@ -180,7 +185,7 @@ class VentanaPrincipal(QMainWindow):
                 "Departamentos con salario promedio superior al promedio general"
             ),
             (
-                # Consulta 6: Cursos que no tienen prerrequisitos y se imparten en el semestre 'Fall' de 2021
+                # Consulta 6: Cursos que no tienen prerrequisitos y se imparten en el semestre 'Fall' de 2017
                 session.query(
                     Course.title.label('Curso'),
                     Section.sec_id.label('Sección'),
@@ -192,10 +197,10 @@ class VentanaPrincipal(QMainWindow):
                             select(Prereq.course_id).where(Prereq.course_id == Course.course_id)
                         ),
                         Section.semester == 'Fall',
-                        Section.year == 2021
+                        Section.year == 2017
                     )
                 ),
-                "Cursos sin prerrequisitos impartidos en otoño de 2021"
+                "Cursos sin prerrequisitos impartidos en otoño de 2017"
             ),
             (
                 # Consulta 7: Nombre de estudiantes y sus asesores, incluyendo estudiantes sin asesor asignado
@@ -208,19 +213,18 @@ class VentanaPrincipal(QMainWindow):
                 "Estudiantes y sus asesores, incluyendo aquellos sin asesor"
             ),
             (
-                # Consulta 8: Instructores que ganan más que el salario promedio de su departamento
+                # Consulta 8: Instructores que enseñan más de un curso
                 session.query(
                     Instructor.name.label('Instructor'),
-                    Instructor.salary.label('Salario'),
-                    Department.dept_name.label('Departamento')
-                ).join(Department, Instructor.dept_name == Department.dept_name).filter(
-                    Instructor.salary > session.query(
-                        func.avg(Instructor.salary)
-                    ).filter(
-                        Instructor.dept_name == Department.dept_name
-                    ).scalar_subquery()
+                    func.count(Teaches.course_id.distinct()).label('Número de Cursos')
+                ).join(
+                    Teaches, Instructor.ID == Teaches.ID
+                ).group_by(
+                    Instructor.ID, Instructor.name
+                ).having(
+                    func.count(Teaches.course_id.distinct()) > 1
                 ),
-                "Instructores que ganan más que el salario promedio de su departamento"
+                "Instructores que enseñan más de un curso"
             ),
             (
                 # Consulta 9: Estudiantes que han tomado cursos con instructores de departamentos diferentes al suyo
@@ -306,7 +310,7 @@ class VentanaPrincipal(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Error", f"No se pudo ejecutar la consulta: {e}")
             
-        
+
     def ejecutar_consulta_personalizada(self):
         # Crear y mostrar el diálogo para ingresar la consulta
         dialogo = ConsultaPersonalizadaDialog()
@@ -457,7 +461,7 @@ if __name__ == "__main__":
 
         # Crear URL de la base de datos
         DATABASE_URL = f"mysql+pymysql://{credentials['username']}:{credentials['password']}@{credentials['host']}/{credentials['database']}"
-        
+
         # Iniciar la aplicación principal
         programa = VentanaPrincipal(DATABASE_URL)
         sys.exit(app.exec())
