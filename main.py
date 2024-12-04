@@ -104,7 +104,7 @@ class VentanaPrincipal(QMainWindow):
         Session = sessionmaker(bind=self.engine)
         session = Session()
 
-        # Lista de consultas complejas utilizando ORM
+        # Lista de consultas usando ORM
         return [
             (
                 # Consulta 1: Número de estudiantes por departamento, ordenados de mayor a menor
@@ -343,7 +343,9 @@ class VentanaPrincipal(QMainWindow):
             except Exception as e:
                 QMessageBox.critical(self, "Error", f"No se pudo ejecutar la consulta: {e}")
 
-        
+
+#Para consultas creadas por el usuario
+
 class ConsultaPersonalizadaDialog(QDialog):
     def __init__(self):
         super().__init__()
@@ -374,7 +376,7 @@ class ConsultaPersonalizadaDialog(QDialog):
         return self.texto_consulta.toPlainText()
 
 
-# Configuración de tablas
+# Creamos las de tablas/ ORM
 class Classroom(Base):
     __tablename__ = 'classroom'
     building = Column(String(15), primary_key=True)
@@ -451,10 +453,14 @@ class Prereq(Base):
     course_id = Column(String(8), ForeignKey('course.course_id', ondelete='CASCADE'), primary_key=True)
     prereq_id = Column(String(8), ForeignKey('course.course_id', ondelete='CASCADE'), primary_key=True)
 
+
+#corrida del codigo
+
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
 
-    # Mostrar ventana de inicio de sesión
+    # Mostrar ventana de inicio de sesion
     login_dialog = LoginDialog()
     if login_dialog.exec():
         credentials = login_dialog.get_credentials()
@@ -462,7 +468,7 @@ if __name__ == "__main__":
         # Crear URL de la base de datos
         DATABASE_URL = f"mysql+pymysql://{credentials['username']}:{credentials['password']}@{credentials['host']}/{credentials['database']}"
 
-        # Iniciar la aplicación principal
+        # Iniciar la aplicacion principal
         programa = VentanaPrincipal(DATABASE_URL)
         sys.exit(app.exec())
     else:
